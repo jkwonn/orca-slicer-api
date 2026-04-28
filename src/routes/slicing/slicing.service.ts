@@ -53,13 +53,21 @@ export async function sliceModel(
   const sliceArg = settings.plate === undefined ? "1" : settings.plate;
   args.push("--slice", sliceArg);
 
-  if (settings.arrange !== undefined) {
-    args.push("--arrange", settings.arrange ? "1" : "0");
-  }
+  // Sinter patch — default arrange/orient to ON so headless slicing mirrors the
+  // desktop app's import behaviour. Without these, OrcaSlicer rejects meshes
+  // exported at world coordinates (common from Fusion/SolidWorks) with
+  // "plate is empty". Callers can still opt out by sending `arrange=false`
+  // or `orient=false` explicitly.
+  //
+  // Multer turns form fields into strings, so `settings.arrange` arrives as
+  // "false"/"true", never a real boolean — compare on the string value.
+  const arrangeOff =
+    settings.arrange === false || String(settings.arrange) === "false";
+  args.push("--arrange", arrangeOff ? "0" : "1");
 
-  if (settings.orient !== undefined) {
-    args.push("--orient", settings.orient ? "1" : "0");
-  }
+  const orientOff =
+    settings.orient === false || String(settings.orient) === "false";
+  args.push("--orient", orientOff ? "0" : "1");
 
   if (tempProfiles?.printer && tempProfiles?.preset) {
     const settingsArg = `${inputDir}/printer.json;${inputDir}/preset.json`;
@@ -87,13 +95,6 @@ export async function sliceModel(
   }
 
   args.push("--allow-newer-file");
-
-  // Use OrcaSlicer's bundled profiles directory so inherits chains resolve
-  const dataDir = process.env.ORCASLICER_DATADIR || "";
-  if (dataDir) {
-    args.push("--datadir", dataDir);
-  }
-
   args.push("--outputdir", outputDir);
 
   args.push(inPath);

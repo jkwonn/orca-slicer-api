@@ -140,3 +140,8 @@ dist
 .DS_Store
 
 data/
+
+# Sinter operational notes — contain infra details, keep local only
+AUTONOMOUS-FIX.md
+SINTER-PATCHES.md
+STATUS.md

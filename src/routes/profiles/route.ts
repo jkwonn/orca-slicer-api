@@ -63,8 +63,12 @@ function validateName(name: string) {
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     throw new AppError(400, "Name cannot be empty");
   }
-  if (!/^[a-zA-Z0-9]+$/.test(name)) {
-    throw new AppError(400, "Name must only contain letters and numbers");
+  // Sinter: allow underscores so slugs like `bambua1_proc` work for paired
+  // (printer, preset, filament) lookups. Hyphens kept out of paranoia about
+  // shell expansion in the CLI invocation, even though slicing.service.ts
+  // uses execFile (no shell) — keeping the surface tight.
+  if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+    throw new AppError(400, "Name must only contain letters, numbers, and underscores");
   }
 }
 
