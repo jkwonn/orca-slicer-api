@@ -11,6 +11,21 @@ import type {
 } from "./models";
 import { Open } from "unzipper";
 
+/**
+ * Parse and clamp a string|number override from the caller. Returns null if
+ * the value is missing/invalid so the caller knows to keep the bundled default.
+ */
+function numericOverride(
+  raw: unknown,
+  min: number,
+  max: number,
+): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const v = typeof raw === "string" ? parseFloat(raw) : Number(raw);
+  if (!Number.isFinite(v) || v < min || v > max) return null;
+  return v;
+}
+
 export async function sliceModel(
   file: Buffer,
   filename: string,
@@ -73,26 +88,106 @@ export async function sliceModel(
     const settingsArg = `${inputDir}/printer.json;${inputDir}/preset.json`;
     args.push("--load-settings", settingsArg);
   } else if (settings.printer && settings.preset) {
-    // Inject auto-support into the preset so overhangs get supports automatically.
-    // OrcaSlicer only generates support material where geometry exceeds the
-    // threshold angle, so parts without overhangs get zero extra material/time.
+    // Patch the loaded preset with (a) auto-support so overhangs always get
+    // supports and (b) any advanced overrides the caller sent (layer height,
+    // infill, walls, speed). OrcaSlicer only adds support material where the
+    // overhang angle exceeds the threshold, so this is free for parts without
+    // overhangs. Overrides are validated/clamped before being injected so a
+    // malformed value can't produce nonsense G-code.
     const presetPath = `${basePath}/presets/${settings.preset}.json`;
+    const machinePath = `${basePath}/printers/${settings.printer}.json`;
     let finalPresetPath = presetPath;
+    let finalMachinePath = machinePath;
     try {
       const raw = await fs.readFile(presetPath, "utf-8");
       const preset = JSON.parse(raw);
+      let modified = false;
+
       if (!preset.enable_support || preset.enable_support === "0") {
         preset.enable_support = "1";
         preset.support_type = preset.support_type || "normal(auto)";
         preset.support_threshold_angle = preset.support_threshold_angle || "45";
-        const tmpPreset = path.join(inputDir, "preset_with_support.json");
+        modified = true;
+      }
+
+      const lh = numericOverride(settings.layerHeight, 0.04, 0.6);
+      if (lh !== null) {
+        preset.layer_height = String(lh);
+        // OrcaSlicer rejects first-layer-height > 1.5× nozzle, so clamp.
+        const flh = Math.min(lh, 0.32);
+        preset.initial_layer_print_height = String(flh);
+        modified = true;
+      }
+
+      const infill = numericOverride(settings.infillDensity, 0, 100);
+      if (infill !== null) {
+        preset.sparse_infill_density = `${Math.round(infill)}%`;
+        modified = true;
+      }
+
+      const walls = numericOverride(settings.wallCount, 1, 10);
+      if (walls !== null) {
+        preset.wall_loops = String(Math.floor(walls));
+        modified = true;
+      }
+
+      // Map our coarse buckets to multipliers on outer/inner-wall speeds. The
+      // bundled presets define explicit mm/s values so multiplying preserves
+      // the proportions OrcaSlicer expects across acceleration/jerk fields.
+      const speedMultiplier =
+        settings.printSpeed === "slow" ? 0.6
+        : settings.printSpeed === "safe" ? 0.8
+        : settings.printSpeed === "standard" ? 1.0
+        : null;
+      if (speedMultiplier !== null && speedMultiplier !== 1.0) {
+        const scaleFloat = (s: unknown) => {
+          const v = typeof s === "string" ? parseFloat(s) : Number(s);
+          return Number.isFinite(v) ? String(v * speedMultiplier) : s;
+        };
+        for (const k of [
+          "outer_wall_speed",
+          "inner_wall_speed",
+          "sparse_infill_speed",
+          "internal_solid_infill_speed",
+          "top_surface_speed",
+          "gap_infill_speed",
+          "support_speed",
+          "travel_speed",
+          "bridge_speed",
+          "overhang_speed",
+        ]) {
+          if (preset[k] != null) preset[k] = scaleFloat(preset[k]);
+        }
+        modified = true;
+      }
+
+      if (modified) {
+        const tmpPreset = path.join(inputDir, "preset_override.json");
         await fs.writeFile(tmpPreset, JSON.stringify(preset));
         finalPresetPath = tmpPreset;
       }
     } catch {
       // If reading/patching fails, use the original preset as-is
     }
-    const settingsArg = `${basePath}/printers/${settings.printer}.json;${finalPresetPath}`;
+
+    // Nozzle diameter lives on the machine profile, not the preset. Patch a
+    // machine override only if requested — most callers leave the printer's
+    // bundled nozzle alone.
+    const nozzle = numericOverride(settings.nozzleDiameter, 0.1, 2.0);
+    if (nozzle !== null) {
+      try {
+        const raw = await fs.readFile(machinePath, "utf-8");
+        const machine = JSON.parse(raw);
+        machine.nozzle_diameter = [String(nozzle)];
+        const tmpMachine = path.join(inputDir, "machine_override.json");
+        await fs.writeFile(tmpMachine, JSON.stringify(machine));
+        finalMachinePath = tmpMachine;
+      } catch {
+        // ignore — use bundled machine profile
+      }
+    }
+
+    const settingsArg = `${finalMachinePath};${finalPresetPath}`;
     args.push("--load-settings", settingsArg);
   }
 

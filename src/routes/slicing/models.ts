@@ -8,6 +8,15 @@ export interface SlicingSettings {
   arrange?: boolean;
   orient?: boolean;
   exportType?: "gcode" | "3mf";
+  /** Process preset overrides — patched into the loaded preset JSON before slicing. */
+  nozzleDiameter?: string | number;
+  layerHeight?: string | number;
+  /** 0–100 percent. */
+  infillDensity?: string | number;
+  /** 1–10 wall loops. */
+  wallCount?: string | number;
+  /** Speed bucket. Mapped to a multiplier on outer_wall_speed at slice time. */
+  printSpeed?: "standard" | "safe" | "slow";
 }
 
 export interface SliceResult {
