@@ -240,7 +240,104 @@ function parseMetaDataFromString(content: string): SliceMetaData {
     printTime: 0,
     filamentUsedG: 0,
     filamentUsedMm: 0,
+    layerCount: 0,
+    extrusionStarts: 0,
+    shortMoves: 0,
+    bridgeMoves: 0,
+    overhangMoves: 0,
+    supportAreaCm2: 0,
+    brimAreaCm2: 0,
   };
+
+  // Pricing metrics: scan G1 moves once, tracking the current feature.
+  // Extrusion start = transition from non-extruding to extruding move.
+  // Short move = XY extrusion move with travel distance < 0.5mm.
+  // Support/brim area = sum(move distance) × line_width / 100 (cm²).
+  try {
+    let lastX = 0;
+    let lastY = 0;
+    let lastWasExtruding = false;
+    let currentFeature: string | null = null;
+    let outerWallLineWidth = 0.42;
+    let supportLineWidth = 0.42;
+    let supportLengthMm = 0;
+    let brimLengthMm = 0;
+
+    const X_RE = /X(-?\d+(?:\.\d+)?)/;
+    const Y_RE = /Y(-?\d+(?:\.\d+)?)/;
+    const E_RE = /E(-?\d*\.?\d+)/;
+
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (!raw) continue;
+
+      if (raw.startsWith("; FEATURE: ")) {
+        currentFeature = raw.slice("; FEATURE: ".length).trim();
+        continue;
+      }
+      if (raw.startsWith("; CHANGE_LAYER")) {
+        data.layerCount += 1;
+        continue;
+      }
+      if (raw.startsWith("; outer_wall_line_width = ")) {
+        const v = parseFloat(raw.slice("; outer_wall_line_width = ".length));
+        if (Number.isFinite(v) && v > 0) outerWallLineWidth = v;
+        continue;
+      }
+      if (raw.startsWith("; support_line_width = ")) {
+        const v = parseFloat(raw.slice("; support_line_width = ".length));
+        if (Number.isFinite(v) && v > 0) supportLineWidth = v;
+        continue;
+      }
+      if (!raw.startsWith("G1 ") && !raw.startsWith("G1\t")) continue;
+
+      const xm = X_RE.exec(raw);
+      const ym = Y_RE.exec(raw);
+      const em = E_RE.exec(raw);
+
+      const newX = xm ? parseFloat(xm[1]) : lastX;
+      const newY = ym ? parseFloat(ym[1]) : lastY;
+      const eDelta = em ? parseFloat(em[1]) : 0;
+
+      const dx = newX - lastX;
+      const dy = newY - lastY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const isExtruding = eDelta > 0;
+      const movedXY = (xm !== null || ym !== null) && dist > 0.0001;
+
+      if (isExtruding && movedXY) {
+        if (!lastWasExtruding) data.extrusionStarts += 1;
+        if (dist < 0.5) data.shortMoves += 1;
+        if (
+          currentFeature === "Bridge" ||
+          currentFeature === "Internal Bridge"
+        ) {
+          data.bridgeMoves += 1;
+        } else if (currentFeature === "Overhang wall") {
+          data.overhangMoves += 1;
+        } else if (
+          currentFeature === "Support" ||
+          currentFeature === "Support interface"
+        ) {
+          supportLengthMm += dist;
+        } else if (currentFeature === "Brim") {
+          brimLengthMm += dist;
+        }
+        lastWasExtruding = true;
+      } else {
+        lastWasExtruding = false;
+      }
+
+      if (xm) lastX = newX;
+      if (ym) lastY = newY;
+    }
+
+    data.supportAreaCm2 = (supportLengthMm * supportLineWidth) / 100;
+    data.brimAreaCm2 = (brimLengthMm * outerWallLineWidth) / 100;
+  } catch (err) {
+    console.error("Failed to parse pricing metrics from G-code:", err);
+  }
 
   try {
     // Extract print time

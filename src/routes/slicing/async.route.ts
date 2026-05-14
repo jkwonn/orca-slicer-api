@@ -240,6 +240,13 @@ async function aggregateMetaData(gcodes: string[]): Promise<SliceMetaData> {
     printTime: 0,
     filamentUsedG: 0,
     filamentUsedMm: 0,
+    layerCount: 0,
+    extrusionStarts: 0,
+    shortMoves: 0,
+    bridgeMoves: 0,
+    overhangMoves: 0,
+    supportAreaCm2: 0,
+    brimAreaCm2: 0,
   };
 
   for (const filePath of gcodes) {
@@ -247,6 +254,13 @@ async function aggregateMetaData(gcodes: string[]): Promise<SliceMetaData> {
     metadata.printTime += fileMetadata.printTime;
     metadata.filamentUsedG += fileMetadata.filamentUsedG;
     metadata.filamentUsedMm += fileMetadata.filamentUsedMm;
+    metadata.layerCount += fileMetadata.layerCount;
+    metadata.extrusionStarts += fileMetadata.extrusionStarts;
+    metadata.shortMoves += fileMetadata.shortMoves;
+    metadata.bridgeMoves += fileMetadata.bridgeMoves;
+    metadata.overhangMoves += fileMetadata.overhangMoves;
+    metadata.supportAreaCm2 += fileMetadata.supportAreaCm2;
+    metadata.brimAreaCm2 += fileMetadata.brimAreaCm2;
   }
 
   return metadata;
