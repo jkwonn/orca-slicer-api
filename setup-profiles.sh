@@ -300,6 +300,41 @@ add_bed flashforgecreator5 220 220 220
 add_bed snapmakerj1 320 200 200
 add_bed snapmakeru1 305 305 305
 
+# Fallback preset mappings: slug -> fallback_slug whose preset to use when the
+# bundled OrcaSlicer doesn't ship one (e.g. newer printers not in v2.3.1).
+# The fallback preset is flattened, then compatible_printers is patched to
+# include the target printer so OrcaSlicer accepts the combo.
+declare -A PRESET_FALLBACK
+PRESET_FALLBACK[crealityhi]=crealityk1
+PRESET_FALLBACK[crealityk1c]=crealityk1
+PRESET_FALLBACK[ender3v3]=ender3v2
+PRESET_FALLBACK[ender5max]=cr10
+PRESET_FALLBACK[prusamk4s]=prusamk4
+PRESET_FALLBACK[prusacoreone]=prusamk4
+PRESET_FALLBACK[anycubickobra2pro]=anycubickobra2
+PRESET_FALLBACK[snapmakeru1]=snapmakerj1
+PRESET_FALLBACK[elegooneptune4]=bambua1
+PRESET_FALLBACK[elegooneptune4pro]=bambua1
+PRESET_FALLBACK[elegoocentauri]=bambua1
+PRESET_FALLBACK[elegoomars3]=bambua1
+PRESET_FALLBACK[elegoosaturn2]=bambua1
+PRESET_FALLBACK[comgrowt300]=bambua1
+PRESET_FALLBACK[comgrowt500]=bambua1
+PRESET_FALLBACK[flashforgead5x]=flashforgead5m
+
+# Fallback filament: slug -> fallback_slug. When the bundled filament doesn't
+# exist, copy from the fallback. Bambu printers share the A1 PLA profile;
+# everything else falls back to genericpla (copied after the main loop).
+declare -A FILAMENT_FALLBACK
+for _s in bambux1carbon bambux1 bambup1p bambup1s bambuh2c bambuh2s bambuh2d bambup2s; do
+  FILAMENT_FALLBACK[$_s]=bambua1
+done
+for _s in prusamk4s prusaxl prusacoreone; do
+  FILAMENT_FALLBACK[$_s]=prusamk4
+done
+
+# --- Pass 1: bake everything that has bundled presets/filaments ---
+declare -A PRINTER_DISPLAY
 while IFS='|' read -r slug vendor machine_name; do
   [ -z "$slug" ] && continue
 
@@ -310,31 +345,52 @@ while IFS='|' read -r slug vendor machine_name; do
     continue
   fi
 
-  # Flatten machine inherits chain, then patch in printable_area / absolute E.
   w=${BED_W[$slug]:-256}
   d=${BED_D[$slug]:-256}
   h=${BED_H[$slug]:-256}
   patch_machine "$src_machine" "$DATA/printers/$slug.json" "$w" "$d" "$h" "$P/$vendor/machine"
 
-  # Derive matched preset + filament from machine's own metadata.
   preset_name=$(python3 -c "import json; d=json.load(open('$src_machine')); print(d.get('default_print_profile',''))")
   filament_name=$(python3 -c "import json; d=json.load(open('$src_machine')); v=d.get('default_filament_profile',['']); print(v[0] if v else '')")
+  PRINTER_DISPLAY[$slug]=$(python3 -c "import json; d=json.load(open('$src_machine')); print(d.get('name',''))")
 
   if [ -n "$preset_name" ] && [ -f "$P/$vendor/process/$preset_name.json" ]; then
-    # Flatten the preset's inherits chain so all fields are explicit.
     flatten_profile "$P/$vendor/process/$preset_name.json" "$DATA/presets/${slug}_proc.json" "$P/$vendor/process"
-  else
-    echo "MISS preset:  $slug -> '$preset_name'"
-    miss_preset=$((miss_preset+1))
+    patch_preset "$DATA/presets/${slug}_proc.json" "$DATA/presets/${slug}_proc.json" "${PRINTER_DISPLAY[$slug]}"
   fi
 
   if [ -n "$filament_name" ] && [ -f "$P/$vendor/filament/$filament_name.json" ]; then
-    # Flatten the filament's inherits chain so filament_diameter, density,
-    # max_volumetric_speed, etc. are all explicit.
     flatten_profile "$P/$vendor/filament/$filament_name.json" "$DATA/filaments/${slug}_pla.json" "$P/$vendor/filament"
-  else
-    echo "MISS filament: $slug -> '$filament_name'"
-    miss_filament=$((miss_filament+1))
+  fi
+done <<< "$PRINTERS"
+
+# --- Pass 2: fill in missing presets/filaments from fallbacks ---
+while IFS='|' read -r slug vendor machine_name; do
+  [ -z "$slug" ] && continue
+
+  # Preset fallback
+  if [ ! -f "$DATA/presets/${slug}_proc.json" ]; then
+    fb="${PRESET_FALLBACK[$slug]}"
+    if [ -n "$fb" ] && [ -f "$DATA/presets/${fb}_proc.json" ]; then
+      cp "$DATA/presets/${fb}_proc.json" "$DATA/presets/${slug}_proc.json"
+      patch_preset "$DATA/presets/${slug}_proc.json" "$DATA/presets/${slug}_proc.json" "${PRINTER_DISPLAY[$slug]}"
+      echo "FALLBACK preset: $slug -> $fb"
+    else
+      echo "MISS preset: $slug (no bundled or fallback)"
+      miss_preset=$((miss_preset+1))
+    fi
+  fi
+
+  # Filament fallback
+  if [ ! -f "$DATA/filaments/${slug}_pla.json" ]; then
+    fb="${FILAMENT_FALLBACK[$slug]}"
+    if [ -n "$fb" ] && [ -f "$DATA/filaments/${fb}_pla.json" ]; then
+      cp "$DATA/filaments/${fb}_pla.json" "$DATA/filaments/${slug}_pla.json"
+      echo "FALLBACK filament: $slug -> $fb"
+    else
+      echo "MISS filament: $slug (no bundled or fallback)"
+      miss_filament=$((miss_filament+1))
+    fi
   fi
 done <<< "$PRINTERS"
 
