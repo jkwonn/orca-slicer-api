@@ -201,10 +201,17 @@ export async function sliceModel(
 export async function getMetaDataFromFile(
   filePath: string,
 ): Promise<SliceMetaData> {
-  let data = {
+  let data: SliceMetaData = {
     printTime: 0,
     filamentUsedG: 0,
     filamentUsedMm: 0,
+    layerCount: 0,
+    extrusionStarts: 0,
+    shortMoves: 0,
+    bridgeMoves: 0,
+    overhangMoves: 0,
+    supportAreaCm2: 0,
+    brimAreaCm2: 0,
   };
 
   if (filePath.endsWith(".gcode")) {
@@ -226,6 +233,13 @@ export async function getMetaDataFromFile(
         data.printTime += metaData.printTime;
         data.filamentUsedG += metaData.filamentUsedG;
         data.filamentUsedMm += metaData.filamentUsedMm;
+        data.layerCount += metaData.layerCount;
+        data.extrusionStarts += metaData.extrusionStarts;
+        data.shortMoves += metaData.shortMoves;
+        data.bridgeMoves += metaData.bridgeMoves;
+        data.overhangMoves += metaData.overhangMoves;
+        data.supportAreaCm2 += metaData.supportAreaCm2;
+        data.brimAreaCm2 += metaData.brimAreaCm2;
       }
     } catch (error) {
       console.error("Failed to read 3MF file for metadata extraction:", error);
