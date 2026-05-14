@@ -221,6 +221,11 @@ if not isinstance(existing, list): existing = []
 if "$printer_name" not in existing:
     existing.append("$printer_name")
 prof["compatible_printers"] = existing
+# Auto-support: OrcaSlicer only generates material where overhangs exceed the
+# threshold angle, so parts without overhangs get zero extra cost.
+prof["enable_support"] = "1"
+prof.setdefault("support_type", "normal(auto)")
+prof.setdefault("support_threshold_angle", "45")
 with open("$dst","w") as f: json.dump(prof, f, indent=2)
 PYEOF
 }

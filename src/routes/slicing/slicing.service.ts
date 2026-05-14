@@ -73,7 +73,26 @@ export async function sliceModel(
     const settingsArg = `${inputDir}/printer.json;${inputDir}/preset.json`;
     args.push("--load-settings", settingsArg);
   } else if (settings.printer && settings.preset) {
-    const settingsArg = `${basePath}/printers/${settings.printer}.json;${basePath}/presets/${settings.preset}.json`;
+    // Inject auto-support into the preset so overhangs get supports automatically.
+    // OrcaSlicer only generates support material where geometry exceeds the
+    // threshold angle, so parts without overhangs get zero extra material/time.
+    const presetPath = `${basePath}/presets/${settings.preset}.json`;
+    let finalPresetPath = presetPath;
+    try {
+      const raw = await fs.readFile(presetPath, "utf-8");
+      const preset = JSON.parse(raw);
+      if (!preset.enable_support || preset.enable_support === "0") {
+        preset.enable_support = "1";
+        preset.support_type = preset.support_type || "normal(auto)";
+        preset.support_threshold_angle = preset.support_threshold_angle || "45";
+        const tmpPreset = path.join(inputDir, "preset_with_support.json");
+        await fs.writeFile(tmpPreset, JSON.stringify(preset));
+        finalPresetPath = tmpPreset;
+      }
+    } catch {
+      // If reading/patching fails, use the original preset as-is
+    }
+    const settingsArg = `${basePath}/printers/${settings.printer}.json;${finalPresetPath}`;
     args.push("--load-settings", settingsArg);
   }
 
