@@ -145,3 +145,13 @@ data/
 AUTONOMOUS-FIX.md
 SINTER-PATCHES.md
 STATUS.md
+
+# Local OrcaSlicer runtime (binary + extracted libraries) — provisioned by
+# scripts/provision-orcaslicer.sh, far too large to track in git.
+.orca-runtime/
+
+# OrcaSlicer writes result.json beside the working directory on some actions.
+result.json
+
+# Test coverage output
+coverage/

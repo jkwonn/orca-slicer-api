@@ -1,129 +1,144 @@
-# OrcaSlicer API
+# OrcaSlicer API & CLI
 
-A RESTful service that leverages the OrcaSlicer CLI to slice 3D models (STL, STEP, 3MF).
+Slice 3D models with [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)
+from a **REST API** or a **terminal CLI** — one slicing core, two front ends.
 
-This project only provides an REST API to the OrcaSlicer CLI, full credit to the [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) contributors for the slicer itself.
+Full credit to the OrcaSlicer contributors for the slicer itself; this project
+only wraps its headless engine.
 
 ## Features
 
-- Slice models (STL, STEP, and 3MF) using OrcaSlicer and the profiles exported from it
-- Export sliced models as a single G-code or 3MF (with G-code included) file, or as a ZIP file containing multiple G-code files
-- Set parameters such as plate numbers, auto-arrange, auto-orient, filament, and more.
-- Slice models asynchronously with a simple job system. (Experimental, see [Async Slicing](#async-slicing) for details)
+- **Slicing** — STL, OBJ, AMF and 3MF, plus **STEP / IGES / BREP CAD files**
+  (triangulated automatically). Export G-code or a 3MF project; multi-plate
+  slicing returns a ZIP of G-codes.
+- **Terminal CLI (`osa`)** — slice, inspect, convert, manage profiles, edit
+  preset settings and browse OrcaSlicer's bundled presets, with a flag for
+  every GUI-equivalent option and a `--set key=value` escape hatch for any
+  OrcaSlicer setting. See **[CLI.md](CLI.md)**.
+- **Transforms & arrangement** — rotate, scale, repeat, auto-arrange,
+  auto-orient, ensure-on-bed, assemble, unit conversion, skip/clone objects.
+- **Quick settings** — layer height, infill, walls, nozzle, speed, support
+  (normal/tree), brim — all overridable per slice without editing a preset.
+- **Model tools** — geometry inspection (`info`), format conversion
+  (`convert`), and print-statistics extraction from sliced files (`inspect`).
+- **Profile management** — store, list, edit (`config set`), diff and import
+  printer / process / filament presets.
+- **Async slicing** — submit long jobs and poll for results (`/slice-async`).
 
-## Requirements 
+## Requirements
 
-- **Node.js** v22
-- **OrcaSlicer** (tested on Linux with AppImage and MacOS)
+- **Node.js** v20.12+ (v22 recommended)
+- **OrcaSlicer** 2.3.x — provisioned locally by the included script, installed
+  system-wide, or run via the bundled `Dockerfile`.
 
 ## Installation
 
-### Production
-
-> **WARNING:**
-> This project is still in early development and may not be suitable for real production use yet. Use at your own risk and ensure you add proper security measures.
-
-#### Docker (Recommended)
-
-You can run the service in a Docker container. This was tested on Linux for now only and might still have some issues.
-
-Run the following commands to set up and start the Docker container (you can change the OrcaSlicer version and architecture (arm64/amd64) as needed):
-
 ```bash
 git clone https://github.com/AFKFelix/orca-slicer-api.git
 cd orca-slicer-api
-docker build --build-arg ORCASLICER_VERSION=2.3.0 --build-arg TARGETARCH=amd64 -t orca-slicer-api .
+npm install
+
+# Download a local OrcaSlicer runtime (extracts the AppImage, no root needed)
+./scripts/provision-orcaslicer.sh
+
+# Configure
+cp .env.example .env          # then edit ORCASLICER_PATH / DATA_PATH
+
+# Verify
+./bin/osa health
+```
+
+> On hosts older than the AppImage's glibc (it targets Ubuntu 24.04), run the
+> slicer via the `Dockerfile` instead — see
+> [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
+### Docker
+
+```bash
+docker build --build-arg ORCA_VERSION=2.3.2 --build-arg TARGETARCH=amd64 -t orca-slicer-api .
 docker run -d -p 3000:3000 --name orca-slicer-api orca-slicer-api
 ```
 
-#### Setup Script
+## Usage
 
-Use the provided setup script to automate installation, configuration, and PM2 setup (Unix only):
-
-```bash
-curl -O https://raw.githubusercontent.com/AFKFelix/orca-slicer-api/main/setup.sh
-chmod +x setup.sh
-./setup.sh
-```
-
-The script will:
-
-- Check for required dependencies
-- Clone the repository
-- Prompt for configuration
-- Install dependencies and build the project
-- Start the API with PM2 and optionally set up auto-start
-
-Note: This setup works best with the AppImage version of OrcaSlicer. It has been tested successfully on Ubuntu (x86_64) using the AppImage, as well as on Debian running on a Raspberry Pi 4 (ARM64) via Flatpak.
-If you're using the Flatpak version, make sure to grant it access to the temporary directory, as this is required for slicing operations. Additionally, you will need to create a wrapper script or similar solution that can serve as the executable path to the OrcaSlicer binary.
-
-### Local (Development)
+### CLI
 
 ```bash
-git clone https://github.com/AFKFelix/orca-slicer-api.git
-cd orca-slicer-api
-
-# Create a .env file in the project root:
-# .env example
-ORCASLICER_PATH=/your/path/OrcaSlicer
-DATA_PATH=/your/path/data
-NODE_ENV=development
-PORT=3000
-
-# Install dependencies and start the dev server
-npm install
-npm run dev
+osa slice benchy.stl --printer bambua1 --process bambua1_proc --filament bambua1_pla -o benchy.gcode
+osa info  bracket.step
+osa inspect benchy.gcode
+osa convert bracket.step --to stl -o bracket.stl
+osa profiles list printers
+osa config set data/presets/bambua1_proc.json layer_height=0.28
+osa serve --port 3000
 ```
+
+The complete command and flag reference, plus a **GUI-feature → CLI mapping
+table**, is in **[CLI.md](CLI.md)**.
+
+### HTTP API
+
+```bash
+osa serve            # or: npm start
+```
+
+```bash
+curl -X POST http://localhost:3000/slice \
+  -F file=@benchy.stl \
+  -F printer=bambua1 -F preset=bambua1_proc -F filament=bambua1_pla \
+  -o benchy.gcode
+```
+
+Endpoints: `/slice`, `/slice-async`, `/profiles`, `/presets`, `/tools/info`,
+`/tools/convert`, `/tools/inspect`, `/health`. Full reference in
+[docs/HTTP-API.md](docs/HTTP-API.md); interactive docs at `GET /api-docs` (dev
+mode) and in [`swagger.json`](swagger.json).
 
 ## Configuration
 
-`ORCASLICER_PATH` (required): Absolute path to the OrcaSlicer binary.\
-`DATA_PATH` (required): Base directory for user uploaded profiles.\
-`NODE_ENV` (required): Sets if run in development or production.\
-`PORT` (optional): Port to run the server on, defaults to 3000.\
-`ASYNC_SLICE_RETENTION_MS` (optional): Time in milliseconds to retain asynchronous slice jobs, defaults to 3600000 (60 minutes). Cleanup runs every 60 minutes.
+Set via `.env` (see [`.env.example`](.env.example)) or the environment:
 
-Profiles are stored under:
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ORCASLICER_PATH` | yes | Path to the OrcaSlicer binary / launcher. |
+| `DATA_PATH` | no | Profile storage directory (default `./data`). |
+| `ORCA_RESOURCES_PATH` | no | OrcaSlicer `resources` dir — enables `presets`. |
+| `PORT` | no | HTTP port (default `3000`). |
+| `NODE_ENV` | no | `development` enables `/api-docs`. |
+| `ASYNC_SLICE_RETENTION_MS` | no | Async job retention (default 60 min). |
+
+Profiles are stored as OrcaSlicer JSON files under:
 
 ```
 <DATA_PATH>/
-├── printers/
-├── presets/
-└── filaments/
+├── printers/     # machine profiles
+├── presets/      # process profiles
+└── filaments/    # filament profiles
 ```
 
-Each profile is a JSON file from OrcaSlicer.
+## Architecture
+
+`src/core/` holds the slicing engine — model conversion, profile resolution,
+preset overrides, the OrcaSlicer process runner and G-code metadata parsing.
+Both the HTTP routes (`src/routes/`) and the CLI (`src/cli/`) are thin layers
+over that core, so a slice is identical regardless of entry point.
 
 ## Security
 
-**WARNING**: No authentication or authorization is implemented. This service should never be exposed directly to the public internet without adding proper security layers.
+**No authentication or authorization is implemented.** Do not expose this
+service directly to the public internet without adding a security layer.
 
-## Async Slicing
+## Development
 
-The API supports asynchronous slicing via the `/slice-async` endpoint to handle bigger models that take longer to slice, without running into HTTP timeouts.
-When you submit a slicing job to this endpoint, it will return a unique `requestId` that you can use to check the status of the job and retrieve the results once it's completed. All jobs will run in the background in parallel, so there is no real queue system.
+```bash
+npm run dev       # HTTP server with reload
+npm run cli -- slice cube.stl --printer bambua1 --process bambua1_proc
+npm test          # vitest suite
+npm run build     # compile to dist/
+npm run lint
+```
 
-Please also note that the jobs are only stored in memory and should be deleted after retrieval. If not deleted, they will be automatically removed after the time specified in `ASYNC_SLICE_RETENTION_MS` (default is 60 minutes).
+## License
 
-This feature is still experimental and might change in future releases, feedback is welcome!
-
-## Roadmap
-
-There are still several improvements planned:
-
-- ~~Multi-plate slicing support~~ (added for 3MF files, returns ZIP of G-codes)
-- ~~Enhanced slicing options~~
-- ~~Improved error handling~~
-- Better profile management system
-- Strengthened security measures
-- Additional quality-of-life features
-- Auto install of OrcaSlicer on setup script
-- Windows setup support
-- Better documentation
-- Tests and CI/CD setup
-
-Feedback is welcome!
-
-## API Endpoints
-
-You can check the Swagger file in the project root or go to /api-docs when running in development.
+AGPL-3.0-or-later. OrcaSlicer is the work of the
+[OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) contributors.
