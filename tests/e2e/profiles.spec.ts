@@ -49,7 +49,7 @@ describe("Profiles API", () => {
         .attach("file", printerBuffer, "printer.json")
         .expect(400)
         .expect((res) => {
-          if (res.body.message !== "Invalid or missing category")
+          if (!/^Invalid category/.test(res.body.message ?? ""))
             throw new Error("Wrong error message: " + res.body.message);
         });
     });
@@ -61,7 +61,10 @@ describe("Profiles API", () => {
         .attach("file", printerBuffer, "printer.json")
         .expect(400)
         .expect((res) => {
-          if (res.body.message !== "Name must only contain letters and numbers")
+          if (
+            res.body.message !==
+            "Name must only contain letters, numbers, and underscores"
+          )
             throw new Error("Wrong error message: " + res.body.message);
         });
     });
@@ -157,14 +160,14 @@ describe("Profiles API", () => {
         });
     });
 
-    it("should return error for non-existent printer profile", async () => {
-      await request.get("/profiles/printers/nonexistent").expect(500);
+    it("should return 404 for non-existent printer profile", async () => {
+      await request.get("/profiles/printers/nonexistent").expect(404);
     });
-    it("should return error for non-existent preset profile", async () => {
-      await request.get("/profiles/presets/nonexistent").expect(500);
+    it("should return 404 for non-existent preset profile", async () => {
+      await request.get("/profiles/presets/nonexistent").expect(404);
     });
-    it("should return error for non-existent filament profile", async () => {
-      await request.get("/profiles/filaments/nonexistent").expect(500);
+    it("should return 404 for non-existent filament profile", async () => {
+      await request.get("/profiles/filaments/nonexistent").expect(404);
     });
   });
 });

@@ -1,15 +1,9 @@
 import type { NextFunction, Response, Request } from "express";
+import { AppError } from "../core/errors";
 
-export class AppError extends Error {
-  status: number = 500;
-  causeMessage?: string;
-
-  constructor(status: number, message: string, causeMessage?: string) {
-    super(message);
-    this.status = status;
-    this.causeMessage = causeMessage;
-  }
-}
+// Re-exported so existing `import { AppError } from "../../middleware/error"`
+// call sites keep working after the type moved into the shared core.
+export { AppError } from "../core/errors";
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 export function errorHandler(
@@ -19,7 +13,7 @@ export function errorHandler(
   next: NextFunction
 ): void {
   console.error(
-    `[${new Date().toISOString()}] Error: ${err.message} 
+    `[${new Date().toISOString()}] Error: ${err.message}
     at ${req.method} ${req.originalUrl} with ${err.stack ?? "no stack trace"}
     ${err.causeMessage ? `Cause: ${err.causeMessage}` : ""}`
   );

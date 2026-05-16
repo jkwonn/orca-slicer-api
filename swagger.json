@@ -2,10 +2,14 @@
   "openapi": "3.0.3",
   "info": {
     "title": "OrcaSlicer API",
-    "version": "1.0.0",
-    "description": "REST API for slicing 3D models (STL, STEP, 3MF) using the OrcaSlicer CLI. Upload and manage slicing profiles (printers, presets, filaments). Returns G-code or 3MF files, with multi-plate support (ZIP archive if multiple G-codes)."
+    "version": "1.1.0",
+    "description": "REST API for slicing 3D models (STL, OBJ, AMF, 3MF and STEP/IGES/BREP CAD files) with OrcaSlicer. Manage profiles, inspect geometry, convert models and read print statistics. The same engine is exposed as the 'osa' terminal CLI \u2014 see CLI.md."
   },
-  "servers": [{ "url": "http://localhost:3000" }],
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
   "tags": [
     {
       "name": "Slicing",
@@ -18,12 +22,26 @@
     {
       "name": "Profiles",
       "description": "Endpoints for managing printer, preset, and filament profiles"
+    },
+    {
+      "name": "Tools",
+      "description": "Model inspection, conversion and G-code analysis"
+    },
+    {
+      "name": "Presets",
+      "description": "Browse OrcaSlicer's bundled system presets"
+    },
+    {
+      "name": "Health",
+      "description": "Service and environment health"
     }
   ],
   "paths": {
     "/slice": {
       "post": {
-        "tags": ["Slicing"],
+        "tags": [
+          "Slicing"
+        ],
         "summary": "Slice a 3D model file",
         "description": "Uploads a 3D model (STL, STEP, or 3MF) and returns a G-code or 3MF file. If multiple G-codes are generated (multi-plate), a ZIP archive is returned.",
         "requestBody": {
@@ -32,7 +50,9 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["file"],
+                "required": [
+                  "file"
+                ],
                 "properties": {
                   "file": {
                     "type": "string",
@@ -84,12 +104,125 @@
                   },
                   "exportType": {
                     "type": "string",
-                    "enum": ["gcode", "3mf"],
+                    "enum": [
+                      "gcode",
+                      "3mf"
+                    ],
                     "description": "Export gcode or 3mf (optional, default: gcode)"
                   },
                   "multicolorOnePlate": {
                     "type": "boolean",
                     "description": "Allow multicolor on one plate when using arrange (optional, default: false)"
+                  },
+                  "rotate": {
+                    "type": "string",
+                    "description": "Rotation around Z in degrees"
+                  },
+                  "rotateX": {
+                    "type": "string",
+                    "description": "Rotation around X in degrees"
+                  },
+                  "rotateY": {
+                    "type": "string",
+                    "description": "Rotation around Y in degrees"
+                  },
+                  "scale": {
+                    "type": "string",
+                    "description": "Uniform scale factor"
+                  },
+                  "repetitions": {
+                    "type": "string",
+                    "description": "Repeat the whole model N times"
+                  },
+                  "ensureOnBed": {
+                    "type": "boolean",
+                    "description": "Lift objects partially below the bed"
+                  },
+                  "assemble": {
+                    "type": "boolean",
+                    "description": "Merge all loaded models into one object"
+                  },
+                  "convertUnit": {
+                    "type": "boolean",
+                    "description": "Convert model units (inch to mm)"
+                  },
+                  "allowRotations": {
+                    "type": "boolean",
+                    "description": "Allow rotation while arranging"
+                  },
+                  "skipObjects": {
+                    "type": "string",
+                    "description": "Comma-separated 1-based object indices to skip"
+                  },
+                  "cloneObjects": {
+                    "type": "string",
+                    "description": "Comma-separated object clone pairs, e.g. 1,3"
+                  },
+                  "layerHeight": {
+                    "type": "string",
+                    "description": "Layer height override in mm (0.04-0.6)"
+                  },
+                  "infillDensity": {
+                    "type": "string",
+                    "description": "Sparse infill density override, 0-100 percent"
+                  },
+                  "infillPattern": {
+                    "type": "string",
+                    "description": "Sparse infill pattern, e.g. grid, gyroid"
+                  },
+                  "wallCount": {
+                    "type": "string",
+                    "description": "Wall loop count override (1-10)"
+                  },
+                  "nozzleDiameter": {
+                    "type": "string",
+                    "description": "Nozzle diameter override in mm (0.1-2.0)"
+                  },
+                  "printSpeed": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "safe",
+                      "slow"
+                    ],
+                    "description": "Coarse print-speed bucket"
+                  },
+                  "support": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "tree",
+                      "tree-auto",
+                      "none"
+                    ],
+                    "description": "Support generation mode"
+                  },
+                  "supportThreshold": {
+                    "type": "string",
+                    "description": "Support overhang angle threshold in degrees"
+                  },
+                  "brimType": {
+                    "type": "string",
+                    "description": "Brim type, e.g. outer_only, no_brim"
+                  },
+                  "brimWidth": {
+                    "type": "string",
+                    "description": "Brim width in mm"
+                  },
+                  "timelapse": {
+                    "type": "boolean",
+                    "description": "Slice as a timelapse print"
+                  },
+                  "debugLevel": {
+                    "type": "string",
+                    "description": "OrcaSlicer log verbosity, 0-5"
+                  },
+                  "set": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Raw OrcaSlicer config overrides as key=value strings (highest priority)"
                   }
                 }
               }
@@ -121,7 +254,10 @@
             },
             "content": {
               "application/octet-stream": {
-                "schema": { "type": "string", "format": "binary" },
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
                 "examples": {
                   "gcodeFile": {
                     "summary": "Example G-code file",
@@ -146,7 +282,9 @@
             "description": "Invalid input or missing parameters",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -154,7 +292,9 @@
             "description": "Slicing failed or server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -163,7 +303,9 @@
     },
     "/slice-async": {
       "post": {
-        "tags": ["Async Slicing"],
+        "tags": [
+          "Async Slicing"
+        ],
         "summary": "Start an asynchronous slice job",
         "description": "Uploads a 3D model (STL, STEP, or 3MF) and returns a job ID for polling. The slicing happens in the background. Use the jobs ID with GET endpoints to check status and retrieve results.",
         "requestBody": {
@@ -172,7 +314,9 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["file"],
+                "required": [
+                  "file"
+                ],
                 "properties": {
                   "file": {
                     "type": "string",
@@ -224,12 +368,125 @@
                   },
                   "exportType": {
                     "type": "string",
-                    "enum": ["gcode", "3mf"],
+                    "enum": [
+                      "gcode",
+                      "3mf"
+                    ],
                     "description": "Export gcode or 3mf (optional, default: gcode)"
                   },
                   "multicolorOnePlate": {
                     "type": "boolean",
                     "description": "Allow multicolor on one plate when using arrange (optional, default: false)"
+                  },
+                  "rotate": {
+                    "type": "string",
+                    "description": "Rotation around Z in degrees"
+                  },
+                  "rotateX": {
+                    "type": "string",
+                    "description": "Rotation around X in degrees"
+                  },
+                  "rotateY": {
+                    "type": "string",
+                    "description": "Rotation around Y in degrees"
+                  },
+                  "scale": {
+                    "type": "string",
+                    "description": "Uniform scale factor"
+                  },
+                  "repetitions": {
+                    "type": "string",
+                    "description": "Repeat the whole model N times"
+                  },
+                  "ensureOnBed": {
+                    "type": "boolean",
+                    "description": "Lift objects partially below the bed"
+                  },
+                  "assemble": {
+                    "type": "boolean",
+                    "description": "Merge all loaded models into one object"
+                  },
+                  "convertUnit": {
+                    "type": "boolean",
+                    "description": "Convert model units (inch to mm)"
+                  },
+                  "allowRotations": {
+                    "type": "boolean",
+                    "description": "Allow rotation while arranging"
+                  },
+                  "skipObjects": {
+                    "type": "string",
+                    "description": "Comma-separated 1-based object indices to skip"
+                  },
+                  "cloneObjects": {
+                    "type": "string",
+                    "description": "Comma-separated object clone pairs, e.g. 1,3"
+                  },
+                  "layerHeight": {
+                    "type": "string",
+                    "description": "Layer height override in mm (0.04-0.6)"
+                  },
+                  "infillDensity": {
+                    "type": "string",
+                    "description": "Sparse infill density override, 0-100 percent"
+                  },
+                  "infillPattern": {
+                    "type": "string",
+                    "description": "Sparse infill pattern, e.g. grid, gyroid"
+                  },
+                  "wallCount": {
+                    "type": "string",
+                    "description": "Wall loop count override (1-10)"
+                  },
+                  "nozzleDiameter": {
+                    "type": "string",
+                    "description": "Nozzle diameter override in mm (0.1-2.0)"
+                  },
+                  "printSpeed": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "safe",
+                      "slow"
+                    ],
+                    "description": "Coarse print-speed bucket"
+                  },
+                  "support": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "tree",
+                      "tree-auto",
+                      "none"
+                    ],
+                    "description": "Support generation mode"
+                  },
+                  "supportThreshold": {
+                    "type": "string",
+                    "description": "Support overhang angle threshold in degrees"
+                  },
+                  "brimType": {
+                    "type": "string",
+                    "description": "Brim type, e.g. outer_only, no_brim"
+                  },
+                  "brimWidth": {
+                    "type": "string",
+                    "description": "Brim width in mm"
+                  },
+                  "timelapse": {
+                    "type": "boolean",
+                    "description": "Slice as a timelapse print"
+                  },
+                  "debugLevel": {
+                    "type": "string",
+                    "description": "OrcaSlicer log verbosity, 0-5"
+                  },
+                  "set": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Raw OrcaSlicer config overrides as key=value strings (highest priority)"
                   }
                 }
               }
@@ -241,7 +498,9 @@
             "description": "Slice job accepted for processing",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SliceJobResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/SliceJobResponse"
+                }
               }
             }
           },
@@ -249,7 +508,9 @@
             "description": "Invalid input or missing parameters",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -257,7 +518,9 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -266,7 +529,9 @@
     },
     "/slice-async/{requestId}": {
       "get": {
-        "tags": ["Async Slicing"],
+        "tags": [
+          "Async Slicing"
+        ],
         "summary": "Get slice job status",
         "description": "Check the status of an asynchronous slice job. Returns job status (pending, processing, completed, failed) and metadata for completed jobs.",
         "parameters": [
@@ -274,7 +539,10 @@
             "name": "requestId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "format": "uuid" },
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
             "description": "Unique job ID returned from POST /slice-async"
           }
         ],
@@ -293,7 +561,9 @@
             "description": "Job ID not found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -301,14 +571,18 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
         }
       },
       "delete": {
-        "tags": ["Async Slicing"],
+        "tags": [
+          "Async Slicing"
+        ],
         "summary": "Delete a slice job",
         "description": "Deletes a slice job and associated files. Can be called on completed or failed jobs.",
         "parameters": [
@@ -316,7 +590,10 @@
             "name": "requestId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "format": "uuid" },
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
             "description": "Unique job ID returned from POST /slice-async"
           }
         ],
@@ -328,7 +605,9 @@
             "description": "Job ID not found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -336,7 +615,9 @@
             "description": "Job not completed or failed.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -344,7 +625,9 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -353,7 +636,9 @@
     },
     "/slice-async/{requestId}/result": {
       "get": {
-        "tags": ["Async Slicing"],
+        "tags": [
+          "Async Slicing"
+        ],
         "summary": "Download slice job results",
         "description": "Downloads the G-code or ZIP archive for a completed slice job. Only available when status is 'completed'. If multiple G-codes were generated (multi-plate), a ZIP archive is returned.",
         "parameters": [
@@ -361,7 +646,10 @@
             "name": "requestId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "format": "uuid" },
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
             "description": "Unique job ID returned from POST /slice-async"
           }
         ],
@@ -371,20 +659,29 @@
             "headers": {
               "X-Print-Time-Seconds": {
                 "description": "Estimated total print time in seconds",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               },
               "X-Filament-Used-g": {
                 "description": "Filament used in grams",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               },
               "X-Filament-Used-mm": {
                 "description": "Filament used in millimeters",
-                "schema": { "type": "string" }
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
               "application/octet-stream": {
-                "schema": { "type": "string", "format": "binary" }
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -392,7 +689,9 @@
             "description": "Job not completed yet",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -400,7 +699,9 @@
             "description": "Job ID not found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -408,7 +709,9 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -417,17 +720,26 @@
     },
     "/profiles/{category}": {
       "post": {
-        "tags": ["Profiles"],
+        "tags": [
+          "Profiles"
+        ],
         "summary": "Upload a profile (printer, preset, or filament)",
         "description": "Upload a new printer, preset, or filament profile (OrcaSlicer JSON format).",
-        "parameters": [{ "$ref": "#/components/parameters/Category" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Category"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["file", "name"],
+                "required": [
+                  "file",
+                  "name"
+                ],
                 "properties": {
                   "file": {
                     "type": "string",
@@ -450,7 +762,11 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": { "name": { "type": "string" } }
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -459,7 +775,9 @@
             "description": "Invalid input or missing parameters",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -467,17 +785,25 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
         }
       },
       "get": {
-        "tags": ["Profiles"],
+        "tags": [
+          "Profiles"
+        ],
         "summary": "List all profiles in a category",
         "description": "List all uploaded profiles for a given category (printers, presets, filaments).",
-        "parameters": [{ "$ref": "#/components/parameters/Category" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Category"
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of profile names",
@@ -485,7 +811,9 @@
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": { "type": "string" }
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -494,7 +822,9 @@
             "description": "Invalid category",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -502,7 +832,9 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -511,16 +843,22 @@
     },
     "/profiles/{category}/{name}": {
       "get": {
-        "tags": ["Profiles"],
+        "tags": [
+          "Profiles"
+        ],
         "summary": "Get a specific profile by name",
         "description": "Get a specific printer, preset, or filament profile by name.",
         "parameters": [
-          { "$ref": "#/components/parameters/Category" },
+          {
+            "$ref": "#/components/parameters/Category"
+          },
           {
             "name": "name",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" },
+            "schema": {
+              "type": "string"
+            },
             "description": "Profile name (alphanumeric)"
           }
         ],
@@ -529,7 +867,9 @@
             "description": "Profile JSON",
             "content": {
               "application/json": {
-                "schema": { "type": "object" }
+                "schema": {
+                  "type": "object"
+                }
               }
             }
           },
@@ -537,7 +877,9 @@
             "description": "Invalid input",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -545,23 +887,31 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
         }
       },
       "delete": {
-        "tags": ["Profiles"],
+        "tags": [
+          "Profiles"
+        ],
         "summary": "Delete a specific profile by name",
         "description": "Deletes a specific printer, preset, or filament profile by name.",
         "parameters": [
-          { "$ref": "#/components/parameters/Category" },
+          {
+            "$ref": "#/components/parameters/Category"
+          },
           {
             "name": "name",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" },
+            "schema": {
+              "type": "string"
+            },
             "description": "Profile name (alphanumeric)"
           }
         ],
@@ -573,7 +923,9 @@
             "description": "Invalid input",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
@@ -581,9 +933,358 @@
             "description": "Server error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Patch settings on a stored profile",
+        "description": "Applies key=value setting changes to a stored profile, the API equivalent of the CLI 'config set'.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Category"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Profile name (alphanumeric)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "set"
+                ],
+                "properties": {
+                  "set": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "key=value assignments, e.g. layer_height=0.28"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Settings updated"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Profile not found"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Service health check",
+        "description": "Reports whether the OrcaSlicer binary runs and the data directory is writable.",
+        "responses": {
+          "200": {
+            "description": "Service is healthy"
+          },
+          "503": {
+            "description": "Service is unhealthy"
+          }
+        }
+      }
+    },
+    "/tools/info": {
+      "post": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Inspect a model's geometry",
+        "description": "Returns the bounding box, triangle count, part count, manifold status and volume. CAD files are triangulated first.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Model file (STL, OBJ, AMF, 3MF, STEP, IGES or BREP)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model geometry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid file"
+          }
+        }
+      }
+    },
+    "/tools/convert": {
+      "post": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Convert a model to STL or 3MF",
+        "description": "Converts an uploaded model and streams the result. STEP/IGES/BREP CAD files are triangulated with OpenCASCADE.",
+        "parameters": [
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "stl",
+                "3mf"
+              ],
+              "default": "stl"
+            },
+            "description": "Target format"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Model file (STL, OBJ, AMF, 3MF, STEP, IGES or BREP)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Converted file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid file / format"
+          }
+        }
+      }
+    },
+    "/tools/inspect": {
+      "post": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Read print statistics from a sliced file",
+        "description": "Extracts print time, filament usage, layer count and pricing metrics from a G-code or 3MF file.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Sliced G-code (.gcode) or 3MF (.3mf) file"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Print statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SliceMetadata"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid file"
+          }
+        }
+      }
+    },
+    "/presets": {
+      "get": {
+        "tags": [
+          "Presets"
+        ],
+        "summary": "List system preset vendors",
+        "responses": {
+          "200": {
+            "description": "Vendor names",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/presets/{vendor}/{kind}": {
+      "get": {
+        "tags": [
+          "Presets"
+        ],
+        "summary": "List a vendor's system presets",
+        "parameters": [
+          {
+            "name": "vendor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "machine",
+                "process",
+                "filament"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preset names",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid kind"
+          }
+        }
+      }
+    },
+    "/presets/{vendor}/{kind}/{name}": {
+      "get": {
+        "tags": [
+          "Presets"
+        ],
+        "summary": "Get a flattened system preset",
+        "description": "Returns the preset with its inherits chain fully resolved.",
+        "parameters": [
+          {
+            "name": "vendor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "machine",
+                "process",
+                "filament"
+              ]
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flattened preset JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Preset not found"
           }
         }
       }
@@ -597,7 +1298,11 @@
         "required": true,
         "schema": {
           "type": "string",
-          "enum": ["printers", "presets", "filaments"]
+          "enum": [
+            "printers",
+            "presets",
+            "filaments"
+          ]
         },
         "description": "Profile category (printers, presets, filaments)"
       }
@@ -606,7 +1311,9 @@
       "Error": {
         "type": "object",
         "properties": {
-          "message": { "type": "string" }
+          "message": {
+            "type": "string"
+          }
         }
       },
       "SliceMetadata": {
@@ -628,7 +1335,11 @@
       },
       "SliceJobResponse": {
         "type": "object",
-        "required": ["requestId", "status", "statusUrl"],
+        "required": [
+          "requestId",
+          "status",
+          "statusUrl"
+        ],
         "properties": {
           "requestId": {
             "type": "string",
@@ -636,7 +1347,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "processing", "completed", "failed"],
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ],
             "description": "Current job status"
           },
           "statusUrl": {
@@ -647,7 +1363,10 @@
       },
       "SliceJobStatusResponse": {
         "type": "object",
-        "required": ["requestId", "status"],
+        "required": [
+          "requestId",
+          "status"
+        ],
         "properties": {
           "requestId": {
             "type": "string",
@@ -655,7 +1374,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "processing", "completed", "failed"],
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ],
             "description": "Current job status"
           },
           "metadata": {
@@ -669,6 +1393,53 @@
           "message": {
             "type": "string",
             "description": "Error message (only present when status is 'failed')"
+          }
+        }
+      },
+      "ModelInfo": {
+        "type": "object",
+        "properties": {
+          "sizeX": {
+            "type": "number"
+          },
+          "sizeY": {
+            "type": "number"
+          },
+          "sizeZ": {
+            "type": "number"
+          },
+          "minX": {
+            "type": "number"
+          },
+          "minY": {
+            "type": "number"
+          },
+          "minZ": {
+            "type": "number"
+          },
+          "maxX": {
+            "type": "number"
+          },
+          "maxY": {
+            "type": "number"
+          },
+          "maxZ": {
+            "type": "number"
+          },
+          "facets": {
+            "type": "integer",
+            "description": "Triangle count"
+          },
+          "parts": {
+            "type": "integer",
+            "description": "Disconnected part count"
+          },
+          "manifold": {
+            "type": "boolean"
+          },
+          "volume": {
+            "type": "number",
+            "description": "Volume in mm3"
           }
         }
       }
