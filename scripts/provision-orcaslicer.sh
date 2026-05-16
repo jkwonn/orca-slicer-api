@@ -71,9 +71,24 @@ exec "$DIR/squashfs-root/AppRun" "$@"
 LAUNCHER
 chmod +x orca
 
-echo "[provision] done — runtime at $(pwd)"
-echo "[provision] set ORCASLICER_PATH=$(pwd)/orca in your .env"
-if ./orca --help >/dev/null 2>&1; then
+RESOURCES="$(pwd)/squashfs-root/resources/profiles"
+RUNTIME_DIR="$(pwd)"
+cd - >/dev/null
+
+# Bake the printer/process/filament profiles from the extracted resources so
+# the CLI/API can slice on every supported printer immediately. The repo
+# already ships a baked data/, but re-baking keeps it in sync with the script.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+if [ -d "$RESOURCES" ]; then
+  echo "[provision] baking printer profiles into data/ ..."
+  ORCA_RESOURCES="$RESOURCES" DATA_DIR="$REPO_ROOT/data" \
+    bash "$REPO_ROOT/setup-profiles.sh" || echo "[provision] WARNING: profile baking failed"
+fi
+
+echo "[provision] done — runtime at $RUNTIME_DIR"
+echo "[provision] set ORCASLICER_PATH=$RUNTIME_DIR/orca in your .env"
+echo "[provision]     ORCA_RESOURCES_PATH=$RUNTIME_DIR/squashfs-root/resources"
+if "$RUNTIME_DIR/orca" --help >/dev/null 2>&1; then
   echo "[provision] OK — OrcaSlicer launches headlessly"
 else
   echo "[provision] WARNING: the binary did not launch — likely a glibc"
