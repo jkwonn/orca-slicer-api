@@ -18,8 +18,17 @@
 
 set -e
 
-P="/app/squashfs-root/resources/profiles"
-DATA="/app/data"
+# Profiles source tree and data output directory. Both are overridable so the
+# script runs both inside the Docker build (the defaults) and locally against
+# a provisioned runtime (ORCA_RESOURCES / DATA_DIR).
+P="${ORCA_RESOURCES:-/app/squashfs-root/resources/profiles}"
+DATA="${DATA_DIR:-/app/data}"
+
+if [ ! -d "$P" ]; then
+  echo "ERROR: OrcaSlicer profiles tree not found at $P" >&2
+  echo "Set ORCA_RESOURCES to <squashfs-root>/resources/profiles" >&2
+  exit 1
+fi
 
 mkdir -p "$DATA/printers" "$DATA/presets" "$DATA/filaments"
 
@@ -99,6 +108,10 @@ flashforgead5x|Flashforge|Flashforge AD5X 0.4 nozzle
 flashforgecreator5|Flashforge|Flashforge Adventurer 5M 0.4 Nozzle
 snapmakerj1|Snapmaker|Snapmaker J1 (0.4 nozzle)
 snapmakeru1|Snapmaker|Snapmaker U1 (0.4 nozzle)
+ender3v3plus|Creality|Creality Ender-3 V3 Plus 0.4 nozzle
+elegoogiga|Elegoo|Elegoo OrangeStorm Giga 0.4 nozzle
+qidixsmart3|Qidi|Qidi X-Smart 3 0.4 nozzle
+qidixplus3|Qidi|Qidi X-Plus 3 0.4 nozzle
 "
 
 miss_machine=0
@@ -122,23 +135,53 @@ miss_filament=0
 flatten_profile() {
   local src="$1" dst="$2" category_dir="$3"
   python3 - <<PYEOF
-import json, os, sys
+import json, os, sys, glob
 
 CATEGORY_DIR = "$category_dir"
+# KIND is machine|process|filament; ROOT is the profiles tree root ($P).
+KIND = os.path.basename(CATEGORY_DIR.rstrip("/"))
+ROOT = os.path.dirname(os.path.dirname(CATEGORY_DIR.rstrip("/")))
 
 def load(path):
     with open(path) as f:
         return json.load(f)
 
+_NAME_INDEX = {}
+
+def name_index():
+    # Map every same-KIND profile's "name" field -> file path. OrcaSlicer
+    # resolves `inherits` by the parent's name, which is not always equal to
+    # its filename (e.g. "QIDI PLA Rapido@Q2-Series"). Built lazily, once.
+    if not _NAME_INDEX:
+        for path in glob.glob(os.path.join(ROOT, "*", KIND, "**", "*.json"),
+                              recursive=True):
+            try:
+                with open(path) as f:
+                    nm = json.load(f).get("name")
+                if nm and nm not in _NAME_INDEX:
+                    _NAME_INDEX[nm] = path
+            except Exception:
+                pass
+    return _NAME_INDEX
+
 def find_parent(name):
-    # Try the same category dir first; fall back to BBL's category dir which
-    # holds the cross-vendor parents like fdm_process_single_0.20 and
-    # fdm_bbl_3dp_001_common.
-    for d in (CATEGORY_DIR, CATEGORY_DIR.replace("/Anycubic/","/BBL/").replace("/Creality/","/BBL/").replace("/Prusa/","/BBL/").replace("/Elegoo/","/BBL/").replace("/Sovol/","/BBL/").replace("/UltiMaker/","/BBL/").replace("/Voron/","/BBL/").replace("/Qidi/","/BBL/").replace("/FLSun/","/BBL/").replace("/Flashforge/","/BBL/").replace("/Snapmaker/","/BBL/").replace("/Comgrow/","/BBL/")):
-        cand = os.path.join(d, name + ".json")
-        if os.path.exists(cand):
+    # 1) same vendor's category dir (and its subdirectories).
+    # 2) any vendor's dir of the same KIND — covers cross-vendor parents like
+    #    fdm_process_single_0.20 and the OrcaFilamentLibrary "@System" presets.
+    # 3) anywhere in the tree, by filename.
+    # 4) by the profile's "name" field, when filename != name.
+    fname = name + ".json"
+    direct = os.path.join(CATEGORY_DIR, fname)
+    if os.path.exists(direct):
+        return direct
+    for pattern in (
+        os.path.join(CATEGORY_DIR, "**", fname),
+        os.path.join(ROOT, "*", KIND, "**", fname),
+        os.path.join(ROOT, "**", fname),
+    ):
+        for cand in sorted(glob.glob(pattern, recursive=True)):
             return cand
-    return None
+    return name_index().get(name)
 
 def flatten(path, depth=0):
     if depth > 10:  # cycle / inheritance loop guard
@@ -304,6 +347,10 @@ add_bed flashforgead5x 220 220 220
 add_bed flashforgecreator5 220 220 220
 add_bed snapmakerj1 320 200 200
 add_bed snapmakeru1 305 305 305
+add_bed ender3v3plus 300 300 330
+add_bed elegoogiga 800 800 1000
+add_bed qidixsmart3 180 180 180
+add_bed qidixplus3 280 280 270
 
 # Fallback preset mappings: slug -> fallback_slug whose preset to use when the
 # bundled OrcaSlicer doesn't ship one (e.g. newer printers not in v2.3.1).
@@ -318,6 +365,11 @@ PRESET_FALLBACK[prusamk4s]=prusamk4
 PRESET_FALLBACK[prusacoreone]=prusamk4
 PRESET_FALLBACK[anycubickobra2pro]=anycubickobra2
 PRESET_FALLBACK[snapmakeru1]=snapmakerj1
+# Ender-3 V3 Plus: v2.3.1's machine profile references a process preset name
+# ("0.20mm Standard @Creality Ender3 V3 Plus") that is mislabelled in the
+# bundle and matches no file/name — reuse the Ender-3 V3 process (same print
+# generation; the larger bed comes from the V3 Plus machine profile).
+PRESET_FALLBACK[ender3v3plus]=ender3v3
 PRESET_FALLBACK[elegooneptune4]=bambua1
 PRESET_FALLBACK[elegooneptune4pro]=bambua1
 PRESET_FALLBACK[elegoocentauri]=bambua1
@@ -337,6 +389,37 @@ done
 for _s in prusamk4s prusaxl prusacoreone; do
   FILAMENT_FALLBACK[$_s]=prusamk4
 done
+
+# --- Generic filaments (baked first so the fallback passes can use them) ---
+# PLA defaults to the per-printer `<slug>_pla` slug; ABS, PETG, etc. use these
+# bundled Generic profiles. Sources are resolved by name so a moved file (the
+# 2.3.x OrcaFilamentLibrary reshuffle) does not silently drop a generic.
+resolve_in_tree() {
+  # Echo the first match for "<name>.json" anywhere under the profiles tree.
+  find "$P" -name "$1.json" 2>/dev/null | head -1
+}
+bake_generic() {
+  local name="$1" dst="$2"
+  local src
+  src=$(resolve_in_tree "$name")
+  if [ -n "$src" ]; then
+    flatten_profile "$src" "$dst" "$(dirname "$src")"
+  else
+    echo "MISS generic filament: $name"
+  fi
+}
+bake_generic "Generic PLA"  "$DATA/filaments/genericpla.json"
+bake_generic "Generic ABS"  "$DATA/filaments/genericabs.json"
+bake_generic "Generic PETG" "$DATA/filaments/genericpetg.json"
+bake_generic "Generic TPU"  "$DATA/filaments/generictpu.json"
+bake_generic "Generic ASA"  "$DATA/filaments/genericasa.json"
+bake_generic "Generic PA"   "$DATA/filaments/genericpa.json"
+bake_generic "Generic PVA"  "$DATA/filaments/genericpva.json"
+bake_generic "fdm_filament_hips" "$DATA/filaments/generichips.json"
+if [ ! -s "$DATA/filaments/genericpla.json" ]; then
+  echo "ERROR: could not bake genericpla.json — cannot guarantee filament coverage" >&2
+  exit 1
+fi
 
 # --- Pass 1: bake everything that has bundled presets/filaments ---
 declare -A PRINTER_DISPLAY
@@ -359,13 +442,29 @@ while IFS='|' read -r slug vendor machine_name; do
   filament_name=$(python3 -c "import json; d=json.load(open('$src_machine')); v=d.get('default_filament_profile',['']); print(v[0] if v else '')")
   PRINTER_DISPLAY[$slug]=$(python3 -c "import json; d=json.load(open('$src_machine')); print(d.get('name',''))")
 
-  if [ -n "$preset_name" ] && [ -f "$P/$vendor/process/$preset_name.json" ]; then
-    flatten_profile "$P/$vendor/process/$preset_name.json" "$DATA/presets/${slug}_proc.json" "$P/$vendor/process"
-    patch_preset "$DATA/presets/${slug}_proc.json" "$DATA/presets/${slug}_proc.json" "${PRINTER_DISPLAY[$slug]}"
+  # Locate the machine's default process preset. As with filaments, v2.3.x
+  # keeps presets in sub-directories — search recursively before falling back.
+  if [ -n "$preset_name" ]; then
+    proc_src=$(find "$P/$vendor/process" -name "$preset_name.json" 2>/dev/null | head -1)
+    if [ -n "$proc_src" ]; then
+      flatten_profile "$proc_src" "$DATA/presets/${slug}_proc.json" "$(dirname "$proc_src")"
+      patch_preset "$DATA/presets/${slug}_proc.json" "$DATA/presets/${slug}_proc.json" "${PRINTER_DISPLAY[$slug]}"
+    fi
   fi
 
-  if [ -n "$filament_name" ] && [ -f "$P/$vendor/filament/$filament_name.json" ]; then
-    flatten_profile "$P/$vendor/filament/$filament_name.json" "$DATA/filaments/${slug}_pla.json" "$P/$vendor/filament"
+  # Locate the machine's default filament. v2.3.x keeps filaments in vendor
+  # sub-directories and in OrcaFilamentLibrary, so search beyond the flat
+  # vendor dir before giving up.
+  if [ -n "$filament_name" ]; then
+    fila_src=""
+    for d in "$P/$vendor/filament" "$P/OrcaFilamentLibrary/filament" "$P/BBL/filament"; do
+      [ -d "$d" ] || continue
+      fila_src=$(find "$d" -name "$filament_name.json" 2>/dev/null | head -1)
+      [ -n "$fila_src" ] && break
+    done
+    if [ -n "$fila_src" ]; then
+      flatten_profile "$fila_src" "$DATA/filaments/${slug}_pla.json" "$(dirname "$fila_src")"
+    fi
   fi
 done <<< "$PRINTERS"
 
@@ -386,38 +485,24 @@ while IFS='|' read -r slug vendor machine_name; do
     fi
   fi
 
-  # Filament fallback
+  # Filament fallback — guarantee every slug ends up with a <slug>_pla.json.
+  # Priority: explicit FILAMENT_FALLBACK map, then the vendor's own "Generic
+  # PLA", then the universal genericpla. A printer never ends up filament-less.
   if [ ! -f "$DATA/filaments/${slug}_pla.json" ]; then
     fb="${FILAMENT_FALLBACK[$slug]}"
+    vendor_pla=$(find "$P/$vendor/filament" -iname "*generic pla.json" 2>/dev/null | head -1)
     if [ -n "$fb" ] && [ -f "$DATA/filaments/${fb}_pla.json" ]; then
       cp "$DATA/filaments/${fb}_pla.json" "$DATA/filaments/${slug}_pla.json"
-      echo "FALLBACK filament: $slug -> $fb"
+      echo "FALLBACK filament: $slug -> ${fb}_pla"
+    elif [ -n "$vendor_pla" ]; then
+      flatten_profile "$vendor_pla" "$DATA/filaments/${slug}_pla.json" "$(dirname "$vendor_pla")"
+      echo "FALLBACK filament: $slug -> $(basename "$vendor_pla")"
     else
-      echo "MISS filament: $slug (no bundled or fallback)"
-      miss_filament=$((miss_filament+1))
+      cp "$DATA/filaments/genericpla.json" "$DATA/filaments/${slug}_pla.json"
+      echo "FALLBACK filament: $slug -> genericpla"
     fi
   fi
 done <<< "$PRINTERS"
-
-# Generic filaments for non-PLA materials. PLA defaults to the per-printer
-# `<slug>_pla` slug (matched to the machine's default_filament_profile); ABS,
-# PETG, etc. fall back to OrcaSlicer's bundled Generic profiles.
-copy_generic() {
-  local src="$1" dst="$2"
-  if [ -f "$src" ]; then
-    flatten_profile "$src" "$dst" "$P/BBL/filament"
-  else
-    echo "MISS generic filament: $src"
-  fi
-}
-copy_generic "$P/BBL/filament/Generic PLA.json"  "$DATA/filaments/genericpla.json"
-copy_generic "$P/BBL/filament/Generic ABS.json"  "$DATA/filaments/genericabs.json"
-copy_generic "$P/BBL/filament/Generic PETG.json" "$DATA/filaments/genericpetg.json"
-copy_generic "$P/BBL/filament/Generic TPU.json"  "$DATA/filaments/generictpu.json"
-copy_generic "$P/BBL/filament/Generic ASA.json"  "$DATA/filaments/genericasa.json"
-copy_generic "$P/BBL/filament/Generic PA.json"   "$DATA/filaments/genericpa.json"
-copy_generic "$P/BBL/filament/Generic PVA.json"  "$DATA/filaments/genericpva.json"
-copy_generic "$P/BBL/filament/fdm_filament_hips.json" "$DATA/filaments/generichips.json"
 
 PRINTERS_BAKED=$(ls "$DATA/printers/" | wc -l)
 PRESETS_BAKED=$(ls "$DATA/presets/" | wc -l)

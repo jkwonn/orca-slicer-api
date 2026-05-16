@@ -190,6 +190,15 @@ export function parseMetaDataFromString(content: string): SliceMetaData {
 
     data.supportAreaCm2 = (supportLengthMm * supportLineWidth) / 100;
     data.brimAreaCm2 = (brimLengthMm * outerWallLineWidth) / 100;
+
+    // OrcaSlicer writes an authoritative `; total layer number: N` summary
+    // line. Prefer it: the `; CHANGE_LAYER` marker counted above only appears
+    // in Bambu-flavour G-code, so non-Bambu printers (Marlin/Klipper, which
+    // use `;LAYER_CHANGE`) would otherwise report zero layers.
+    const totalLayerMatch = content.match(/; total layer number:\s*(\d+)/i);
+    if (totalLayerMatch) {
+      data.layerCount = parseInt(totalLayerMatch[1], 10);
+    }
   } catch (err) {
     console.error("Failed to parse pricing metrics from G-code:", err);
   }
