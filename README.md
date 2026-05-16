@@ -23,6 +23,9 @@ only wraps its headless engine.
   (`convert`), and print-statistics extraction from sliced files (`inspect`).
 - **Profile management** — store, list, edit (`config set`), diff and import
   printer / process / filament presets.
+- **Pre-baked printer profiles** — 74 brand-specific printer profiles across
+  11 brands ship ready to use, covering every printer in Sinter's database.
+  See **[docs/PRINTER-COVERAGE.md](docs/PRINTER-COVERAGE.md)**.
 - **Async slicing** — submit long jobs and poll for results (`/slice-async`).
 
 ## Requirements

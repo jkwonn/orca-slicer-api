@@ -373,6 +373,50 @@ Show the CLI, OrcaSlicer and Node.js versions (`--json` for machine output).
 
 ---
 
+## Printer profiles
+
+`osa slice --printer <slug>` resolves a stored profile triplet from the data
+directory:
+
+- `--printer <slug>` → `$DATA_PATH/printers/<slug>.json`
+- `--process <slug>_proc` → `$DATA_PATH/presets/<slug>_proc.json`
+- `--filament <slug>_pla` → `$DATA_PATH/filaments/<slug>_pla.json`
+
+The repository ships a pre-baked profile for **every printer in Sinter's
+`PRINTER_DATABASE`** — 74 printer slugs across 11 brands — generated from
+OrcaSlicer 2.3.1's bundled vendor profiles by `setup-profiles.sh`. Every
+printer profile is brand-specific (correct bed size, kinematics and G-code
+flavour); each slug has a complete process preset and PLA filament.
+
+Run `osa profiles list printers` for the live list. Available slugs:
+
+| Brand | Slugs |
+|-------|-------|
+| Bambu Lab | `bambua1` `bambua1mini` `bambup1p` `bambup1s` `bambup2s` `bambux1` `bambux1carbon` `bambuh2c` `bambuh2d` `bambuh2s` |
+| Anycubic | `anycubickobra2` `anycubickobra2pro` `anycubickobra3max` `anycubickobra3v2` `anycubickobras1` `anycubickobras1max` `anycubickobrax` `anycubicvyper` `anycubicphotonmonox` |
+| Creality | `crealityk1` `crealityk1c` `crealityk1max` `crealityk2` `crealityk2plus` `crealityk2pro` `crealityhi` `crealitysparkx` `cr10` `ender3s1` `ender3v2` `ender3v3` `ender3v3plus` `ender5max` |
+| Elegoo | `elegooneptune4` `elegooneptune4pro` `elegoocentauri` `elegoogiga` `elegoomars3` `elegoosaturn2` |
+| Flashforge | `flashforgead5m` `flashforgead5mpro` `flashforgead5x` `flashforgecreator5` |
+| FLSun | `flsuns1` `flsunt1` |
+| Prusa | `prusamk4` `prusamk4s` `prusamk3s` `prusamini` `prusaxl` `prusacoreone` |
+| Qidi | `qidiq1pro` `qidiq2` `qidiplus4` `qidixmax` `qidixsmart3` `qidixplus3` `qidimax4` |
+| Snapmaker | `snapmakerj1` `snapmakeru1` |
+| Sovol | `sovolsv06` `sovolsv07` `sovolsv08` `sovolsv08max` `sovolzero` |
+| Voron | `voron02` `voron24` `vorontrident` |
+| Comgrow / UltiMaker | `comgrowt300` `comgrowt500` `ultimaker2plus` `ultimakers3` `ultimakers5` `ultimakers7` |
+
+A full make/model → slug → real-slice-result matrix for all 72 Sinter
+printers is in **[docs/PRINTER-COVERAGE.md](docs/PRINTER-COVERAGE.md)** (62
+slice on a brand-specific profile, 10 documented Bambu A1 fallbacks, 0
+failures). Re-bake the profiles any time with:
+
+```bash
+ORCA_RESOURCES=<runtime>/squashfs-root/resources/profiles \
+  DATA_DIR=./data bash setup-profiles.sh
+```
+
+---
+
 ## Exit codes
 
 | Code | Meaning |
