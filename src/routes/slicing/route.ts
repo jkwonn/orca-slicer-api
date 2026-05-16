@@ -50,14 +50,16 @@ router.post(
     );
 
     if (gcodes.length === 1) {
-      try {
-        const metadata = await getMetaDataFromFile(gcodes[0]);
-        res.set(generateMetaDataHeaders(metadata));
+      const metadata = await getMetaDataFromFile(gcodes[0]);
+      res.set(generateMetaDataHeaders(metadata));
 
-        res.download(gcodes[0]);
-      } finally {
-        await fs.rm(workdir, { recursive: true, force: true });
-      }
+      // Clean up only once the download has finished streaming. Removing the
+      // working directory in a `finally` would race the still-async
+      // `res.download`, deleting the G-code mid-transfer and surfacing as a
+      // spurious 404 (Express tags an ENOENT from sendFile with status 404).
+      res.download(gcodes[0], path.basename(gcodes[0]), () => {
+        void fs.rm(workdir, { recursive: true, force: true });
+      });
     } else if (gcodes.length > 1) {
       const metadata: SliceMetaData = {
         printTime: 0,
