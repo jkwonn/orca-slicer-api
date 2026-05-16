@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# osa — OrcaSlicer terminal toolkit launcher.
+# Runs the compiled CLI when a build exists, otherwise the TypeScript source
+# via tsx so the tool works straight from a checkout with no build step.
+set -e
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+if [ -f "$HERE/dist/src/cli.js" ]; then
+  exec node "$HERE/dist/src/cli.js" "$@"
+fi
+exec "$HERE/node_modules/.bin/tsx" "$HERE/src/cli.ts" "$@"
